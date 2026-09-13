@@ -3,6 +3,9 @@ name: War Thunder News Parser
 on:
   workflow_dispatch:
 
+  schedule:
+    - cron: "*/5 * * * *"
+
 permissions:
   contents: write
 
