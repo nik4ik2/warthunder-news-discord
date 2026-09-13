@@ -173,7 +173,7 @@ def send_to_discord(item):
         },
         "title": item["title"],
         "description": description,
-        "colour": "0xf50000",
+        "color": "#f50000",
         "url": item["url"],
         "footer": {
             "text": "War Thunder • Новости"
