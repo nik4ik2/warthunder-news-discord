@@ -16,84 +16,135 @@ HEADERS = {
 }
 
 
-response = requests.get(
-    NEWS_URL,
-    headers=HEADERS,
-    timeout=30
-)
-
-response.raise_for_status()
-
-soup = BeautifulSoup(response.text, "html.parser")
+def clean_text(text):
+    return " ".join(text.split())
 
 
-# Ищем конкретную свежую новость
-target = None
+def get_news():
 
-for a in soup.find_all("a", href=True):
-    if "/ru/news/18006-" in a["href"]:
-        target = a
-        break
+    response = requests.get(
+        NEWS_URL,
+        headers=HEADERS,
+        timeout=30
+    )
+
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    news = []
+    seen = set()
+
+    # Ищем все карточки новостей
+    for widget in soup.select(".showcase__item.widget"):
+
+        link = widget.select_one("a.widget__link[href]")
+
+        if not link:
+            continue
+
+        href = link["href"]
+
+        # Только настоящие новости
+        if not href.startswith("/ru/news/"):
+            continue
+
+        if "/page/" in href or "?" in href:
+            continue
+
+        url = urljoin(BASE_URL, href)
+
+        if url in seen:
+            continue
+
+        seen.add(url)
+
+        # ID новости
+        slug = href.rstrip("/").split("/")[-1]
+        news_id = slug.split("-")[0]
+
+        if not news_id.isdigit():
+            continue
+
+        # Заголовок
+        title_element = widget.select_one(".widget__title")
+        title = (
+            clean_text(title_element.get_text(" ", strip=True))
+            if title_element
+            else ""
+        )
+
+        # Описание
+        comment_element = widget.select_one(".widget__comment")
+        description = (
+            clean_text(comment_element.get_text(" ", strip=True))
+            if comment_element
+            else ""
+        )
+
+        # Дата
+        date_element = widget.select_one(".widget-meta__item")
+        date = (
+            clean_text(date_element.get_text(" ", strip=True))
+            if date_element
+            else ""
+        )
+
+        # Картинка
+        image_element = widget.select_one(".widget__poster-media")
+
+        image = ""
+
+        if image_element:
+
+            image = (
+                image_element.get("data-src")
+                or image_element.get("src")
+                or ""
+            )
+
+            if image.startswith("//"):
+                image = "https:" + image
+
+            elif image.startswith("/"):
+                image = urljoin(BASE_URL, image)
+
+        news.append({
+            "id": news_id,
+            "title": title,
+            "description": description,
+            "date": date,
+            "image": image,
+            "url": url
+        })
+
+    return news
 
 
-if target is None:
-    print("Новость 18006 не найдена!")
-    exit()
+def main():
 
-
-print("=" * 100)
-print("НАЙДЕННАЯ ССЫЛКА")
-print("=" * 100)
-
-print(target)
-
-print()
-print("=" * 100)
-print("HTML РОДИТЕЛЯ")
-print("=" * 100)
-
-parent = target.parent
-
-print(parent.prettify()[:10000])
-
-print()
-print("=" * 100)
-print("HTML РОДИТЕЛЯ РОДИТЕЛЯ")
-print("=" * 100)
-
-parent2 = parent.parent
-
-print(parent2.prettify()[:15000])
-
-print()
-print("=" * 100)
-print("ЗАГОЛОВКИ В БЛОКЕ")
-print("=" * 100)
-
-for tag in parent2.find_all(["h1", "h2", "h3", "h4", "h5"]):
-    print("TAG:", tag.name)
-    print("TEXT:", tag.get_text(" ", strip=True))
+    print("Получаем новости War Thunder...")
     print()
 
-print()
-print("=" * 100)
-print("КАРТИНКИ В БЛОКЕ")
-print("=" * 100)
+    news = get_news()
 
-for img in parent2.find_all("img"):
-    print("SRC:", img.get("src"))
-    print("DATA-SRC:", img.get("data-src"))
-    print("ALT:", img.get("alt"))
+    print(f"Найдено новостей: {len(news)}")
     print()
 
-print()
-print("=" * 100)
-print("ТЕКСТ БЛОКА")
-print("=" * 100)
+    for item in news:
 
-print(parent2.get_text("\n", strip=True)[:10000])
+        print("=" * 100)
 
-print()
-print("=" * 100)
-print("ГОТОВО")
-print("=" * 100)
+        print(f"ID:          {item['id']}")
+        print(f"TITLE:       {item['title']}")
+        print(f"DESCRIPTION: {item['description']}")
+        print(f"DATE:        {item['date']}")
+        print(f"IMAGE:       {item['image']}")
+        print(f"URL:         {item['url']}")
+
+    print()
+    print("Готово.")
+
+
+if __name__ == "__main__":
+    main()
