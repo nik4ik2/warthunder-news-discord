@@ -1,10 +1,18 @@
+import json
+import os
+from pathlib import Path
+from urllib.parse import urljoin, quote
+
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
 
 
 NEWS_URL = "https://warthunder.com/ru/news"
 BASE_URL = "https://warthunder.com"
+
+STATE_FILE = Path("data/sent_news.json")
+
+WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
 HEADERS = {
     "User-Agent": (
@@ -35,7 +43,6 @@ def get_news():
     news = []
     seen = set()
 
-    # Ищем все карточки новостей
     for widget in soup.select(".showcase__item.widget"):
 
         link = widget.select_one("a.widget__link[href]")
@@ -45,7 +52,6 @@ def get_news():
 
         href = link["href"]
 
-        # Только настоящие новости
         if not href.startswith("/ru/news/"):
             continue
 
@@ -59,14 +65,12 @@ def get_news():
 
         seen.add(url)
 
-        # ID новости
         slug = href.rstrip("/").split("/")[-1]
         news_id = slug.split("-")[0]
 
         if not news_id.isdigit():
             continue
 
-        # Заголовок
         title_element = widget.select_one(".widget__title")
         title = (
             clean_text(title_element.get_text(" ", strip=True))
@@ -74,7 +78,6 @@ def get_news():
             else ""
         )
 
-        # Описание
         comment_element = widget.select_one(".widget__comment")
         description = (
             clean_text(comment_element.get_text(" ", strip=True))
@@ -82,7 +85,6 @@ def get_news():
             else ""
         )
 
-        # Дата
         date_element = widget.select_one(".widget-meta__item")
         date = (
             clean_text(date_element.get_text(" ", strip=True))
@@ -90,7 +92,6 @@ def get_news():
             else ""
         )
 
-        # Картинка
         image_element = widget.select_one(".widget__poster-media")
 
         image = ""
@@ -109,6 +110,9 @@ def get_news():
             elif image.startswith("/"):
                 image = urljoin(BASE_URL, image)
 
+            # Кодируем пробелы и другие символы в URL
+            image = quote(image, safe=":/?&=#")
+
         news.append({
             "id": news_id,
             "title": title,
@@ -121,6 +125,84 @@ def get_news():
     return news
 
 
+def load_sent():
+
+    if not STATE_FILE.exists():
+        return set()
+
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        return set(str(x) for x in data)
+
+    except Exception as e:
+        print(f"Ошибка чтения состояния: {e}")
+        return set()
+
+
+def save_sent(sent):
+
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(
+            sorted(sent, key=int),
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
+
+
+def send_to_discord(item):
+
+    if not WEBHOOK_URL:
+        raise RuntimeError(
+            "Не найден секрет DISCORD_WEBHOOK_URL"
+        )
+
+    description = item["description"]
+
+    if len(description) > 4096:
+        description = description[:4093] + "..."
+
+    embed = {
+        "title": item["title"],
+        "description": description,
+        "url": item["url"],
+        "footer": {
+            "text": "War Thunder • Новости"
+        }
+    }
+
+    if item["image"]:
+        embed["image"] = {
+            "url": item["image"]
+        }
+
+    payload = {
+        "username": "War Thunder News",
+        "allowed_mentions": {
+            "parse": []
+        },
+        "embeds": [embed]
+    }
+
+    response = requests.post(
+        WEBHOOK_URL,
+        json=payload,
+        timeout=30
+    )
+
+    if response.status_code != 204:
+        raise RuntimeError(
+            f"Discord вернул {response.status_code}: "
+            f"{response.text}"
+        )
+
+    print(f"✓ Отправлено: {item['id']} — {item['title']}")
+
+
 def main():
 
     print("Получаем новости War Thunder...")
@@ -129,18 +211,42 @@ def main():
     news = get_news()
 
     print(f"Найдено новостей: {len(news)}")
+
+    sent = load_sent()
+
+    print(f"Уже отправлено: {len(sent)}")
+
+    new_news = [
+        item for item in news
+        if item["id"] not in sent
+    ]
+
+    print(f"Новых новостей: {len(new_news)}")
     print()
 
-    for item in news:
+    if not new_news:
+        print("Новых новостей нет.")
+        return
 
-        print("=" * 100)
+    # Старые новости отправляем первыми
+    new_news.sort(key=lambda x: int(x["id"]))
 
-        print(f"ID:          {item['id']}")
-        print(f"TITLE:       {item['title']}")
-        print(f"DESCRIPTION: {item['description']}")
-        print(f"DATE:        {item['date']}")
-        print(f"IMAGE:       {item['image']}")
-        print(f"URL:         {item['url']}")
+    for item in new_news:
+
+        try:
+            send_to_discord(item)
+            sent.add(item["id"])
+
+        except Exception as e:
+
+            print(
+                f"✗ Ошибка отправки "
+                f"{item['id']}: {e}"
+            )
+
+            break
+
+    save_sent(sent)
 
     print()
     print("Готово.")
