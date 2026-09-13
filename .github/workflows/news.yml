@@ -31,14 +31,27 @@ jobs:
 
       - name: Save sent news
         run: |
+          echo "Проверяем состояние..."
+
+          if [ ! -f data/sent_news.json ]; then
+            echo "ОШИБКА: data/sent_news.json не создан!"
+            exit 1
+          fi
+
+          cat data/sent_news.json
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/sent_news.json
 
           if git diff --cached --quiet; then
-            echo "Новых изменений для сохранения нет."
-          else
-            git commit -m "Update sent news state"
-            git push
+            echo "Изменений нет."
+            exit 0
           fi
+
+          git commit -m "Update sent news state"
+
+          git pull --rebase origin main
+
+          git push origin main
