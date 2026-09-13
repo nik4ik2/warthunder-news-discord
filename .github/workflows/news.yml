@@ -21,5 +21,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run parser
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           python parser.py
