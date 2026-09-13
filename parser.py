@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from pathlib import Path
 from urllib.parse import urljoin, quote
 
@@ -188,19 +189,43 @@ def send_to_discord(item):
         "embeds": [embed]
     }
 
-    response = requests.post(
-        WEBHOOK_URL,
-        json=payload,
-        timeout=30
-    )
+    while True:
 
-    if response.status_code != 204:
+        response = requests.post(
+            WEBHOOK_URL,
+            json=payload,
+            timeout=30
+        )
+
+        if response.status_code == 204:
+            print(
+                f"✓ Отправлено: "
+                f"{item['id']} — {item['title']}"
+            )
+            return
+
+        if response.status_code == 429:
+
+            try:
+                retry_after = response.json().get(
+                    "retry_after",
+                    1
+                )
+            except Exception:
+                retry_after = 1
+
+            print(
+                f"Discord ограничил отправку. "
+                f"Ждём {retry_after} сек..."
+            )
+
+            time.sleep(float(retry_after) + 0.2)
+            continue
+
         raise RuntimeError(
             f"Discord вернул {response.status_code}: "
             f"{response.text}"
         )
-
-    print(f"✓ Отправлено: {item['id']} — {item['title']}")
 
 
 def main():
@@ -236,6 +261,8 @@ def main():
         try:
             send_to_discord(item)
             sent.add(item["id"])
+
+            time.sleep(1)
 
         except Exception as e:
 
