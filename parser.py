@@ -7,8 +7,7 @@ URL = "https://warthunder.com/ru/news"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 "
-        "(KHTML, like Gecko) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/140.0.0.0 Safari/537.36"
     )
 }
@@ -30,29 +29,36 @@ def main():
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    links = []
+    # Ищем ВСЕ ссылки, в которых есть /news/
+    links = soup.find_all("a", href=True)
 
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
+    print(f"Всего ссылок на странице: {len(links)}")
+    print()
+    print("Ссылки, связанные с news:")
+    print("=" * 100)
 
-        if "/ru/news/" not in href:
+    count = 0
+
+    for a in links:
+
+        href = a.get("href", "")
+
+        if "/news" not in href:
             continue
 
-        title = a.get_text(" ", strip=True)
+        text = a.get_text(" ", strip=True)
 
-        if not title:
-            continue
+        print(f"TEXT: {text[:150]}")
+        print(f"HREF: {href}")
+        print("-" * 100)
 
-        links.append((title, href))
+        count += 1
+
+        if count >= 50:
+            break
 
     print()
-    print(f"Найдено ссылок на новости: {len(links)}")
-    print()
-
-    for title, href in links[:20]:
-        print("=" * 80)
-        print(f"TITLE: {title}")
-        print(f"URL:   {href}")
+    print(f"Показано ссылок: {count}")
 
 
 if __name__ == "__main__":
