@@ -168,8 +168,12 @@ def send_to_discord(item):
         description = description[:4093] + "..."
 
     embed = {
+        "author": {
+            "name": "War Thunder | Официальные новости"
+        },
         "title": item["title"],
         "description": description,
+        "colour": 0xf50000,
         "url": item["url"],
         "footer": {
             "text": "War Thunder • Новости"
