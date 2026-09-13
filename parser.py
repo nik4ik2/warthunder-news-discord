@@ -6,7 +6,6 @@ from urllib.parse import urljoin
 NEWS_URL = "https://warthunder.com/ru/news"
 BASE_URL = "https://warthunder.com"
 
-
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -17,100 +16,84 @@ HEADERS = {
 }
 
 
-def clean_text(text):
-    return " ".join(text.split())
+response = requests.get(
+    NEWS_URL,
+    headers=HEADERS,
+    timeout=30
+)
+
+response.raise_for_status()
+
+soup = BeautifulSoup(response.text, "html.parser")
 
 
-def get_news():
+# Ищем конкретную свежую новость
+target = None
 
-    response = requests.get(
-        NEWS_URL,
-        headers=HEADERS,
-        timeout=30
-    )
-
-    response.raise_for_status()
-
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    news = []
-    seen = set()
-
-    for a in soup.find_all("a", href=True):
-
-        href = a["href"]
-
-        # Нас интересуют только реальные статьи.
-        # Фильтры и пагинация сюда не попадут.
-        if not href.startswith("/ru/news/"):
-            continue
-
-        # Исключаем пагинацию
-        if "/page/" in href:
-            continue
-
-        # Исключаем URL с параметрами
-        if "?" in href:
-            continue
-
-        url = urljoin(BASE_URL, href)
-
-        # Уже встречали эту новость
-        if url in seen:
-            continue
-
-        seen.add(url)
-
-        # ID новости
-        parts = href.split("/")
-
-        if len(parts) < 4:
-            continue
-
-        slug = parts[3]
-
-        try:
-            news_id = slug.split("-")[0]
-
-            if not news_id.isdigit():
-                continue
-
-        except Exception:
-            continue
-
-        # Пока title берём из атрибутов/текста ссылки.
-        title = clean_text(a.get_text(" ", strip=True))
-
-        news.append({
-            "id": news_id,
-            "url": url,
-            "title": title,
-        })
-
-    return news
+for a in soup.find_all("a", href=True):
+    if "/ru/news/18006-" in a["href"]:
+        target = a
+        break
 
 
-def main():
+if target is None:
+    print("Новость 18006 не найдена!")
+    exit()
 
-    print("Получаем новости War Thunder...")
+
+print("=" * 100)
+print("НАЙДЕННАЯ ССЫЛКА")
+print("=" * 100)
+
+print(target)
+
+print()
+print("=" * 100)
+print("HTML РОДИТЕЛЯ")
+print("=" * 100)
+
+parent = target.parent
+
+print(parent.prettify()[:10000])
+
+print()
+print("=" * 100)
+print("HTML РОДИТЕЛЯ РОДИТЕЛЯ")
+print("=" * 100)
+
+parent2 = parent.parent
+
+print(parent2.prettify()[:15000])
+
+print()
+print("=" * 100)
+print("ЗАГОЛОВКИ В БЛОКЕ")
+print("=" * 100)
+
+for tag in parent2.find_all(["h1", "h2", "h3", "h4", "h5"]):
+    print("TAG:", tag.name)
+    print("TEXT:", tag.get_text(" ", strip=True))
     print()
 
-    news = get_news()
+print()
+print("=" * 100)
+print("КАРТИНКИ В БЛОКЕ")
+print("=" * 100)
 
-    print(f"Найдено новостей: {len(news)}")
+for img in parent2.find_all("img"):
+    print("SRC:", img.get("src"))
+    print("DATA-SRC:", img.get("data-src"))
+    print("ALT:", img.get("alt"))
     print()
 
-    for item in news:
+print()
+print("=" * 100)
+print("ТЕКСТ БЛОКА")
+print("=" * 100)
 
-        print("=" * 100)
+print(parent2.get_text("\n", strip=True)[:10000])
 
-        print(f"ID:    {item['id']}")
-        print(f"TITLE: {item['title']}")
-        print(f"URL:   {item['url']}")
-
-    print()
-    print("Готово.")
-
-
-if __name__ == "__main__":
-    main()
+print()
+print("=" * 100)
+print("ГОТОВО")
+print("=" * 100)
